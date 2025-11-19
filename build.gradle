@@ -16,22 +16,9 @@ dependencies {
 
 test {
     useJUnitPlatform()
-    finalizedBy(jacocoTestReport) 
+    finalizedBy(jacocoTestReport) // génère le rapport automatiquement après les tests
 }
 
 jacoco {
-    toolVersion = "0.8.10" 
-}
-
-tasks.register("jacocoTestReport", JacocoReport) {
-    dependsOn(tasks.test)
-
-    reports {
-        xml.required.set(true)
-        html.required.set(true)
-    }
-
-    sourceDirectories.setFrom(files("src/main/java"))
-    classDirectories.setFrom(files("build/classes/java/main"))
-    executionData.setFrom(fileTree(buildDir).include("/jacoco/test.exec"))
+    toolVersion = "0.8.10" // version de Jacoco
 }
