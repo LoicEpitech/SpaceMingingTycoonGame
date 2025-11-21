@@ -13,7 +13,7 @@ public class VideoFirstGround {
 
     public VideoFirstGround(StackPane root, String videoFileName, boolean loop) {
         try {
-            String path = (new File("SpaceMining/src/assets/videos/" + videoFileName)).toURI().toString();
+            String path = (new File("src/assets/videos/" + videoFileName)).toURI().toString();
             Media media = new Media(path);
             this.player = new MediaPlayer(media);
             this.player.setMute(false);

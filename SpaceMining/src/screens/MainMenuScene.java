@@ -1,5 +1,6 @@
 package screens;
 
+import game.GameState;
 import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Scene;
@@ -29,11 +30,7 @@ public class MainMenuScene {
         });
 
         loadBtn.setOnAction(e -> {
-            // Décommenter si tu veux charger le jeu
-            // GameScene game = new GameScene(stage, SaveManager.loadShipType());
-            // SaveManager.loadGameInto(game);
-            // stage.setScene(game.getScene());
-            // stage.setFullScreen(true);
+            ShipSelectionScene.startGame(stage, "load", true);
         });
 
         settingsBtn.setOnAction(e -> {

@@ -1,5 +1,5 @@
     package world.planet;
-    
+
     import entities.Ressource;
     import game.GameState;
     import javafx.scene.Scene;
@@ -8,10 +8,19 @@
     import ui.SellMenu;
     import ui.UpgradeMenu;
     import utils.InteractiveZone;
-    
+
     import java.util.ArrayList;
     import java.util.List;
-    
+
+    import ui.HUD;
+    import javafx.scene.canvas.Canvas;
+    import javafx.scene.canvas.GraphicsContext;
+    import javafx.animation.AnimationTimer;
+
+    import static game.GameState.currentState;
+    import entities.Ressource;
+    import screens.GameScene;
+
     /**
      * Représente une planète explorable dans l’univers du jeu.
      * <p>
@@ -33,12 +42,12 @@
      * Une fois la planète chargée, la scène JavaFX peut être récupérée via {@link #getPlanetScene()}.
      */
     public class Planet {
-    
+
         private static final double VIRTUAL_WIDTH = 1920;
         private static final double VIRTUAL_HEIGHT = 1080;
-    
+
         private static List<Planet> planets = new ArrayList<>();
-    
+
         // Données de gameplay
         private String name;
         private int requiredLevel;
@@ -46,32 +55,37 @@
         private Ressource planetResource;
         private MoonType moonType;
         private int timeTravelling;
-    
+
         // Données visuelles et audio
         private String backgroundPath;
         private List<?> decorList;
         private String audioPath;
         private List<InteractiveZone> zones;
-    
+
         // Composants
         private PlanetView view;
         private PlanetAudio audio;
         private PlanetAssetsLoader loader;
         private InteractiveController interactions;
         private RoverController rover;
-    
+
         // Events
         private Runnable onEnterPlanet;
         private Runnable onExitPlanet;
-    
+
         // Scene exposée
         private Scene planetScene;
-    
+
+        private AnimationTimer loop;
+        private Canvas hudCanvas;
+        private GraphicsContext gc;
+        private HUD hud;
+
         // Enum
         public enum MoonType { MECHANICAL, MARKET, FARM }
-    
+
         // === Constructeurs ===
-    
+
         /**
          * Crée une planète contenant uniquement les données de gameplay.
          *
@@ -94,10 +108,10 @@
             } else {
                 this.timeTravelling = 0;
             }
-    
+
             addPlanet(this);
         }
-    
+
         /**
          * Crée une planète contenant uniquement les données de gameplay.
          *
@@ -111,7 +125,7 @@
             this(name, requiredLevel, difficulty, moonType);
             this.planetResource = ressource;
         }
-    
+
         /**
          * Crée une planète en définissant les données de gameplay
          * ainsi que les assets visuels et audio.
@@ -131,7 +145,7 @@
             this.decorList = decorList;
             this.audioPath = audioPath;
         }
-    
+
         /**
          * Crée une planète en définissant les données de gameplay
          * ainsi que les assets visuels et audio.
@@ -150,8 +164,8 @@
             this.decorList = decorList;
             this.audioPath = audioPath;
         }
-    
-    
+
+
         /**
          * Crée une planète avec assets visuels, audio et zones interactives.
          *
@@ -169,7 +183,7 @@
             this(name, requiredLevel, difficulty, moonType, ressource, backgroundPath, decorList, audioPath);
             this.zones = zones;
         }
-    
+
         /**
          * Charge l’ensemble des assets définis par les constructeurs :
          * arrière-plan, décor, audio et zones interactives.
@@ -179,7 +193,7 @@
         public void loadAssets() {
             this.loadAssets(this.backgroundPath, this.decorList, this.audioPath, this.zones);
         }
-    
+
         /**
          * Charge les assets sans zones interactives.
          *
@@ -190,7 +204,7 @@
         public void loadAssets(String backgroundPath, List<?> decorList, String audioPath) {
             this.loadAssets(backgroundPath, decorList, audioPath, null);
         }
-    
+
         /**
          * Charge tous les assets et construit la scène interne de la planète.
          *
@@ -204,17 +218,43 @@
             audio  = new PlanetAudio();
             view   = new PlanetView();
             Pane rootPane = loader.load(backgroundPath, decorList, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+
             view.initialize(rootPane);
             this.planetScene = view.buildScene();
+
+            // === HUD GESTION ===
+            System.out.println("Initializing HUD canvas...");
+
+            // Initialisation du canvas HUD
+            hudCanvas = new Canvas(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+            gc = hudCanvas.getGraphicsContext2D();
+
+            // Configuration du canvas
+            hudCanvas.setMouseTransparent(true);
+            hudCanvas.setVisible(true);
+            hudCanvas.setOpacity(1.0);
+
+            // IMPORTANT : Ajouter le canvas à la scène
+            rootPane.getChildren().add(hudCanvas);
+            hudCanvas.toFront();
+
+            System.out.println("Canvas added to scene, children count: " + rootPane.getChildren().size());
+
+            // Le HUD sera initialisé dans enterPlanetView
+            hud = null;
+
+            // Setup resizing
+            setupHUDCanvasResizing();
+
             audio.load(audioPath);
             interactions = new InteractiveController(rootPane, zones);
             if (this.moonType == MoonType.FARM) rover = new RoverController(rootPane, interactions);
-            new RoverPathEditor(rootPane, view); // dev tool rover route editor
+            new RoverPathEditor(rootPane, view);
             attachSceneEvents();
         }
-    
+
         // === Scene events ===
-    
+
         /**
          * Attache les différents listeners clavier/souris à la scène de la planète.
          * <ul>
@@ -229,21 +269,23 @@
                 if (e.getCode() == KeyCode.ESCAPE) exitPlanetView();
                 if (rover != null) rover.onKeyPressed(e.getCode());
             });
-    
+
             planetScene.setOnKeyReleased(e -> {
                 if (rover != null) rover.onKeyReleased(e.getCode());
             });
-    
+
             planetScene.setOnMouseClicked(e -> {
+                Ressource rrr = currentState.currentPlanet.getResource();
+                currentState.ship.addRessource(rrr, 1);
                 interactions.handleClick(view.toVirtual(e.getSceneX(), e.getSceneY()));
             });
-    
+
             planetScene.widthProperty().addListener((obs, o, n) -> view.adjustScale());
             planetScene.heightProperty().addListener((obs, o, n) -> view.adjustScale());
         }
-    
+
         // === Entrée / sortie planète ===
-    
+
         /**
          * Appelé lorsque le joueur entre dans la scène de la planète.
          * <p>
@@ -253,23 +295,60 @@
             if (audio != null) audio.play();
             if (rover != null) rover.start();
             if (onEnterPlanet != null) onEnterPlanet.run();
+
+            this.enterPlanetView(GameState.getCurrentState());
         }
-    
+
         public void enterPlanetView(GameState state) {
+            System.out.println("Entering planet view: " + name);
+
             if (audio != null) audio.play();
             if (rover != null) rover.start();
             if (onEnterPlanet != null) onEnterPlanet.run();
+
+            // AJOUT : Initialiser le HUD avec le bon GameState
+            if (hud == null) {
+                hud = new HUD();
+                System.out.println("HUD created with state - Credits: " + GameState.getCurrentState().credits);
+            } else {
+                System.out.println("HUD state updated - Credits: " + GameState.getCurrentState().credits);
+            }
+
+            HUD.setHud(hud);
+
+            // IMPORTANT : S'assurer que le canvas HUD est au premier plan
+            if (hudCanvas != null && view.getRootPane().getChildren().contains(hudCanvas)) {
+                hudCanvas.toFront();
+                System.out.println("Canvas brought to front");
+            }
+
             if (this.getMoonType() == MoonType.MARKET) {
-                UpgradeMenu upgradeMenu = new UpgradeMenu(state, state.tools);
+                UpgradeMenu upgradeMenu = new UpgradeMenu(state);
                 SellMenu sellMenu = new SellMenu(state.ship, state, upgradeMenu);
                 view.getRootPane().getChildren().add(sellMenu);
                 upgradeMenu.setTranslateX(960);
                 view.getRootPane().getChildren().add(upgradeMenu);
-    
             }
-    
+
+            System.out.println("Starting animation loop...");
+
+            loop = new AnimationTimer() {
+                private long last = 0;
+
+                @Override
+                public void handle(long now) {
+                    if (last > 0) {
+                        double dt = (now - last) / 1e9;
+                        update(dt);
+                    }
+                    last = now;
+                }
+            };
+            loop.start();
+
+            System.out.println("Animation loop started!");
         }
-    
+
         /**
          * Appelé lorsque le joueur quitte la planète.
          * <p>
@@ -279,43 +358,95 @@
             if (audio != null) audio.stop();
             if (rover != null) rover.stop();
             if (onExitPlanet != null) onExitPlanet.run();
+            if (loop != null) {
+                loop.stop();
+                loop = null;
+            }
         }
-    
+
         // === Getters setters ===
-    
+
         /** Définit le callback exécuté lors de l’entrée dans la planète. */
         public void setOnEnterPlanet(Runnable r) { this.onEnterPlanet = r; }
-    
+
         /** Définit le callback exécuté lors de la sortie de la planète. */
         public void setOnExitPlanet(Runnable r) { this.onExitPlanet = r; }
-    
-    
+
+
         /** @return la scène JavaFX construite pour cette planète */
         public Scene getPlanetScene() { return planetScene; }
-    
+
         /** @return le nom de la planète */
         public String getName() { return name; }
-    
+
         /** @return la ressource disponible sur la planète */
         public Ressource getResource() { return this.planetResource; }
-    
+
         /** @return le niveau requis pour accéder à cette planète */
         public int getRequiredLevel() { return this.requiredLevel; }
-    
+
         /** @return la difficulté de la planète */
         public float getDifficulty() { return this.difficulty; }
-    
+
         /** @return le type de biome/lune associé */
         public MoonType getMoonType() { return this.moonType; }
-    
+
         public int getTravelTime() { return this.timeTravelling; }
-    
+
         // getter setter statics \\
         public static List<Planet> getPlanets() { return planets; }
         public static void addPlanet(Planet planet) { planets.add(planet); }
-    
+
         // fall Back
         public int getResearchNeeded() { return this.getRequiredLevel(); }
         public Ressource getPrimary() { return this.getResource(); }
-    
+
+        private void update(double dt) {
+            if (hud == null || gc == null) {
+                System.out.println("HUD or GC is null!");
+                return;
+            }
+
+            // Mettre le canvas au premier plan à chaque frame
+            hudCanvas.toFront();
+
+            // Mise à jour du HUD
+            if (hud != null && gc != null) hud.render(gc);
+
+            // Nettoyage du canvas
+            gc.clearRect(0, 0, hudCanvas.getWidth(), hudCanvas.getHeight());
+            gc.save();
+
+            if (view != null) {
+                double scaleX = hudCanvas.getWidth() / VIRTUAL_WIDTH;
+                double scaleY = hudCanvas.getHeight() / VIRTUAL_HEIGHT;
+                double scale = Math.min(scaleX, scaleY);
+                double offsetX = (hudCanvas.getWidth() - VIRTUAL_WIDTH * scale) / 2;
+                double offsetY = (hudCanvas.getHeight() - VIRTUAL_HEIGHT * scale) / 2;
+
+                gc.translate(offsetX, offsetY);
+                gc.scale(scale, scale);
+            }
+
+            // Rendu du HUD
+            hud.render(gc);
+            currentState.currentPlanet.getResource().checkMining(dt, hud);
+            gc.restore();
+        }
+
+        /**
+         * Configure le redimensionnement automatique du canvas HUD
+         */
+        private void setupHUDCanvasResizing() {
+            if (hudCanvas != null && planetScene != null) {
+                planetScene.widthProperty().addListener((obs, oldVal, newVal) -> {
+                    hudCanvas.setWidth(newVal.doubleValue());
+                });
+
+                planetScene.heightProperty().addListener((obs, oldVal, newVal) -> {
+                    hudCanvas.setHeight(newVal.doubleValue());
+                });
+            }
+        }
+
     }

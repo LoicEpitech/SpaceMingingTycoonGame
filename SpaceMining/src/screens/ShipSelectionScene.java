@@ -19,9 +19,9 @@ public class ShipSelectionScene {
         Button stockBtn = new Button("Transporteur");
         Button discountBtn = new Button("Discount");
 
-        speedBtn.setOnAction(e -> startGame(stage, "speed"));
-        stockBtn.setOnAction(e -> startGame(stage, "stock"));
-        discountBtn.setOnAction(e -> startGame(stage, "discount"));
+        speedBtn.setOnAction(e -> startGame(stage, "speed", false));
+        stockBtn.setOnAction(e -> startGame(stage, "stock", false));
+        discountBtn.setOnAction(e -> startGame(stage, "discount", false));
 
         VBox menuBox = new VBox(20, speedBtn, stockBtn, discountBtn);
         menuBox.setAlignment(Pos.CENTER);
@@ -39,8 +39,8 @@ public class ShipSelectionScene {
         stage.show();
     }
 
-    private void startGame(Stage stage, String type) {
-        GameScene game = new GameScene(stage, type);
+    public static void startGame(Stage stage, String type,boolean loadGame) {
+         GameScene game = new GameScene(stage, type, loadGame);
         stage.setScene(game.getScene());
         stage.setFullScreenExitHint("");
         stage.setFullScreenExitKeyCombination(null);

@@ -14,11 +14,28 @@ dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'
 }
 
+sourceSets {
+    main {
+        java {
+            srcDirs = ['SpaceMining/src']
+        }
+    }
+    test {
+        java {
+            srcDirs = ['SpaceMining/test']
+        }
+    }
+}
+
 test {
     useJUnitPlatform()
-    finalizedBy(jacocoTestReport) // génère le rapport automatiquement après les tests
+    finalizedBy(jacocoTestReport)
 }
 
 jacoco {
-    toolVersion = "0.8.10" // version de Jacoco
+    toolVersion = "0.8.10"
+}
+
+jacocoTestReport {
+    dependsOn test
 }

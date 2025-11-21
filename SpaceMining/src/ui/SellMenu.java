@@ -12,9 +12,12 @@ import javafx.scene.layout.VBox;
 
 import java.util.Map;
 
+import static game.GameState.currentState;
+
 public class SellMenu extends GameMenu {
     private UpgradeMenu upgradeMenu;
     private final VBox itemsBox = new VBox(20);
+
 
     public SellMenu(Ship currentShip, GameState gameState, UpgradeMenu upgradeMenu) {
         super("Sell Terminal");
@@ -52,7 +55,7 @@ public class SellMenu extends GameMenu {
         sellAll.setOnAction(e -> {
             gameState.ship.sellAll(gameState);
             refresh(currentShip, gameState);
-            if (upgradeMenu != null) upgradeMenu.refresh(gameState, gameState.tools);
+            if (upgradeMenu != null) upgradeMenu.refresh();
         });
 
         this.getChildren().add(sellAll);
@@ -102,7 +105,7 @@ public class SellMenu extends GameMenu {
             state.credits += quantity * r.getPriceMax();
             ship.removeRessource(r, quantity);
             refresh(ship, state);
-            if (upgradeMenu != null) upgradeMenu.refresh(state, state.tools);
+            if (upgradeMenu != null) upgradeMenu.refresh();
         });
 
         VBox card = new VBox(10, label, sellBtn);

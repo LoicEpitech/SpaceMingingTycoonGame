@@ -1,12 +1,10 @@
 package screens;
 
-import entities.Mineral;
-import entities.Ressource;
-import entities.Player;
+import entities.*;
 
-import entities.Tool;
 import game.GameState;
 import javafx.animation.AnimationTimer;
+import javafx.application.Platform;
 import javafx.geometry.Point2D;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Scene;
@@ -25,6 +23,9 @@ import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
+import javafx.scene.layout.StackPane;
+import javafx.scene.layout.Pane;
+import javafx.scene.paint.Color;
 
 import ships.Ship_Discount;
 import ships.Ship_Speed;
@@ -49,9 +50,14 @@ import javafx.scene.shape.Rectangle;
 
 import static game.GameState.currentState;
 
+import utils.InteractiveZone;
+import world.asset.DecorData;
+import javafx.scene.shape.Rectangle;
+
+import static game.GameState.currentState;
+import ui.HUD;
 public class GameScene {
     //region --- Champs ---
-    Random random = new Random();
     private String message = "";
     private long messageStartTime = 0;
     private final long MESSAGE_DURATION = 2000; // durée en millisecondes (ici 2 secondes)
@@ -65,7 +71,7 @@ public class GameScene {
     private final Canvas canvas;
     private final GraphicsContext gc;
 
-    public final GameState state = currentState; // [hugo update] mtn il sufi de faire import static game.GameState.currentState; et d utiliser currentState (c est l equivalent de state  c est appellable de nimport ou c est une hyper global en quelque sorte)
+    public final GameState state = currentState;
     private final Player player;
     private final Stage primaryStage;
 
@@ -87,23 +93,32 @@ public class GameScene {
     private float miningDuration = 2f;
 
     // --- Ressources ---
-    private Image bgTexture;
     private Image shipTexture;
-    private Image playerTexture;
     private Image shipContourTexture;
+    private Image playerUp;
+    private Image playerDown;
+    private Image playerLeft;
+    private Image playerRight;
 
     // Inputs
     private boolean mouseLeftPressed = false;
     private boolean mouseRightPressed = false;
     private double mouseX, mouseY;
+    private enum Direction { UP, DOWN, LEFT, RIGHT }
+    private Direction playerDirection = Direction.DOWN;
+
 
     private AnimationTimer loop;
     private Point2D savedShipPosition = null;
     private AnimationTimer planetLoop;
 
     private boolean escHandled = false;
+    private boolean f2Handled = false;
+    private HUD hud = new HUD();
     //endregion
     //region --- Constructeur ---
+
+
     public GameScene(Stage stage, String shipType) {
         this.primaryStage = stage;
 
@@ -131,17 +146,23 @@ public class GameScene {
         createZones();
         currentState.currentPlanet = this.targetPlanet;
         createPlanets();
+        createTools();
         setupUI(root);
         setupInput();
         setupResizeListener();
         startGameLoop();
 
-
     }
 
-    private void loadShip(String type) {
+    public GameScene(Stage stage, String shipType, Boolean Save) {
+        this(stage,shipType);
+        if (Save) {
+            tools.SaveManager.loadGame();
+        }
+    }
+
+        private void loadShip(String type) {
         switch (type.toLowerCase()) {
-            case "speed" -> state.ship = new Ship_Speed();
             case "stock" -> state.ship = new Ship_Stock();
             case "discount" -> state.ship = new Ship_Discount();
             default -> state.ship = new Ship_Speed();
@@ -149,9 +170,20 @@ public class GameScene {
     }
 
     private void loadAssets() {
-        shipTexture = new Image("assets/spaceship.jpg");
-        playerTexture = new Image("assets/player.png");
+        switch (state.interiorStyle) {
+            case CLASSIC ->
+                    shipTexture = new Image("assets/ship/spaceship.jpg");
+            case INDUSTRIAL ->
+                    shipTexture = new Image("assets/ship/spaceship1.jpg");
+            case FUTURISTIC ->
+                    shipTexture = new Image("assets/ship/spaceship2.jpg");
+        }
         shipContourTexture = new Image("assets/contourSpaceship.png");
+        playerUp = new Image("assets/astronautTop.png");
+        playerDown = new Image("assets/astronaut.png");
+        playerLeft = new Image("assets/astronautLeft.png");
+        playerRight = new Image("assets/astronautRight.png");
+
     }
 
     private void createZones() {
@@ -169,7 +201,7 @@ public class GameScene {
         List<InteractiveZone> interactiveZones = List.of(
                 new InteractiveZone(
                         new Rectangle(1050, 520, 150, 150),
-                        () -> startMining()
+                        () -> currentState.currentPlanet.getResource().startMining(hud)
                 )
         );
 
@@ -178,6 +210,20 @@ public class GameScene {
         new Planet("Crysalon", 2, 2, Planet.MoonType.FARM, Mineral.DIAMOND, "/assets/hubloView.png", decor, "/assets/music/GameOST.mp3", interactiveZones);
         new Planet("Orichara", 3, 1, Planet.MoonType.FARM, Mineral.ORICHALCUM, "/assets/hubloView.png", decor, "/assets/music/GameOST.mp3", interactiveZones);
         System.out.println(currentState.currentPlanet.getName());
+    }
+
+
+    //endregion
+    //region --- Setup ---
+    private void createTools() {
+        currentState.ship.addTool(new Drill());
+        new Laser();
+        new Plasma();
+
+        System.out.println("Liste totale des tools = ");
+        for (Tool t : Tool.getTools()) {
+            System.out.println(" - " + t.getName());
+        }
     }
     //endregion
     //region --- Setup ---
@@ -210,19 +256,12 @@ public class GameScene {
         scene.widthProperty().addListener((obs, oldW, newW) -> canvas.setWidth(newW.doubleValue()));
         scene.heightProperty().addListener((obs, oldH, newH) -> canvas.setHeight(newH.doubleValue()));
     }
-    public void setState(GameState newState) {
-        this.state.credits = newState.credits;
-        this.state.ship = newState.ship;
-        this.state.storage.clear();
-        this.state.storage.putAll(newState.storage);
-        //this.state.planets.clear(); // old pour confirmation de supression
-        //this.state.planets.addAll(newState.planets); // old pour confirmation de supression
-    }
+
     private void setupUI(StackPane root) {
         this.uiLayer = new Pane();
         this.uiLayer.setPickOnBounds(false);
 
-        this.sellMenu = new SellMenu(this.state.ship, state, new UpgradeMenu(state, state.tools));
+        this.sellMenu = new SellMenu(this.state.ship, state, new UpgradeMenu(state));
         this.sellMenu.setLayoutX(760);
         this.sellMenu.setLayoutY(300);
         this.sellMenu.setVisible(false);
@@ -236,9 +275,6 @@ public class GameScene {
 
         root.getChildren().add(this.uiLayer);
     }
-    //endregion
-
-    //region --- Boucle Principale ---
     private void updateBackgroundForPlanet(Planet planet) {
 
         String bgVideo = planet.getName() + ".mp4";
@@ -252,14 +288,37 @@ public class GameScene {
         this.backgroundVideo = new VideoBackground((StackPane) this.scene.getRoot(), bgVideo);
         this.backgroundVideo.play();
     }
+    //endregion
+
+    //region --- Boucle Principale ---
 
     private void update(double dt) {
+        if (keysPressed.contains(KeyCode.F2) && !f2Handled) {
+            f2Handled = true;
+            tools.SaveManager.saveGame();
+            Platform.runLater(() -> showMessage("Partie sauvegardée !"));
+        } else if (!keysPressed.contains(KeyCode.F2)) {
+            f2Handled = false;
+        }
+
         if (keysPressed.contains(KeyCode.ESCAPE) && !escHandled) {
+            tools.SaveManager.saveGame();
             escHandled = true;
             goToMainMenu();
             return;
         } else if (!keysPressed.contains(KeyCode.ESCAPE)) escHandled = false;
-
+        if (keysPressed.contains(KeyCode.Z)) {
+            playerDirection = Direction.UP;
+        }
+        if (keysPressed.contains(KeyCode.S)) {
+            playerDirection = Direction.DOWN;
+        }
+        if (keysPressed.contains(KeyCode.Q)) {
+            playerDirection = Direction.LEFT;
+        }
+        if (keysPressed.contains(KeyCode.D)) {
+            playerDirection = Direction.RIGHT;
+        }
         player.move(dt);
 
         Zone.checkPlayerHoverZone(player.getPosition().getX(), player.getPosition().getY()); // Verif hover zone \\
@@ -320,7 +379,7 @@ public class GameScene {
 
         if (this.traveling) {
 
-            this.travelDuration = (double) this.targetPlanet.getTravelTime();
+            this.travelDuration = (double) this.targetPlanet.getTravelTime()*(1.0 + (1.0 - currentState.ship.getSpeed())); // Ajuste la durée en fonction de la vitesse du vaisseau
             this.travelProgress += (float) (dt / this.travelDuration);
             if (this.travelProgress >= 1.0F) {
                 this.traveling = false;
@@ -335,28 +394,9 @@ public class GameScene {
             }
         }
 
-        if (mining) {
-            miningProgress += dt / miningDuration;
-
-            if (miningProgress >= 1) {
-                mining = false;
-                Ressource drop = state.currentPlanet.getResource();
-                String necessaryTool = drop.getNecessaryTool();
-
-                Tool matchingTool = null;
-                for (Tool tool : state.tools) {
-                    if (tool.getName().equals(necessaryTool)) {
-                        matchingTool = tool;
-                        break;
-                    }
-                }
-
-                int gain = calculateGain(matchingTool);
-                state.ship.addRessource(drop, gain);
-                showMessage("Minage terminé ! +" + gain + " " + drop.getName());
-            }
-        }
+        // on peut faire un rapelle du minage ici au besoin
     }
+
     private void startGameLoop() {
         loop = new AnimationTimer() {
             private long last = 0;
@@ -374,47 +414,6 @@ public class GameScene {
         loop.start();
     }
 //endregion
-
-    //region --- Mining ---
-    private void startMining() {
-
-        mining = true;
-        miningProgress = 0;
-
-        Ressource res = state.currentPlanet.getResource();
-        String necessaryTool = res.getNecessaryTool();
-
-        Tool matchingTool = null;
-
-        for (Tool tool : state.tools) {
-            if (tool.getName().equals(necessaryTool)) {
-                matchingTool = tool;
-                break;
-            }
-        }
-
-        // Si aucun outil trouvé → durée = difficulté * 2 (minage lent)
-        int level = (matchingTool != null) ? matchingTool.getLevel() : 1;
-        miningDuration = (2f * state.currentPlanet.getDifficulty()) / level;
-
-        showMessage("Début du minage sur " + state.currentPlanet.getName() + "...");
-    }
-
-    private int calculateGain(Tool tool) {
-        if (tool == null) return 0;
-
-        int level = tool.getLevel();
-
-        if (level == 1) {
-            return 1;
-        } else if (level == 2) {
-            return random.nextInt(2) + 1; // 1 ou 2
-        } else if (level == 3) {
-            return random.nextInt(3) + 1; // 1 à 3
-        } else {
-            return 0; // cas par défaut si jamais un autre niveau apparaît
-        }
-    }
 
 
     //endregion
@@ -469,16 +468,12 @@ public class GameScene {
         planet.enterPlanetView(state);
     }
 //endregion
-    private void upgradeShip() {
-        if (state.credits >= state.ship.upgradeCost()) {
-            state.credits -= state.ship.upgradeCost();
-            state.ship.upgradeLevel++;
-        }
-    }
+
     //region --- Graphique ---
     private void showMessage(String text) {
-        message = text;
-        messageStartTime = System.currentTimeMillis();
+        //message = text;
+        //messageStartTime = System.currentTimeMillis();
+        hud.addNotification(text);
     }
     private void render() {
         double scaleX = canvas.getWidth() / VIRTUAL_WIDTH;
@@ -492,80 +487,24 @@ public class GameScene {
         gc.translate(offsetX, offsetY);
         gc.scale(scale, scale);
         gc.setFont(Font.font("Verdana", FontWeight.BOLD, 14));
-        gc.drawImage(bgTexture, 0, 0, 1920, 1080);
         gc.drawImage(shipTexture, 300, 400, 1300, 500);
-        gc.drawImage(playerTexture,
+        Image texture = switch (playerDirection) {
+            case UP -> playerUp;
+            case DOWN -> playerDown;
+            case LEFT -> playerLeft;
+            case RIGHT -> playerRight;
+        };
+
+        gc.drawImage(texture,
                 player.getPosition().getX() - 32,
                 player.getPosition().getY() - 32,
-                64, 64);
+                90, 90);
         gc.drawImage(shipContourTexture, -145, -50, 2150, 1400);
-
-        gc.setFill(Color.WHITE);
-        gc.fillText("Crédits: " + (int) state.credits, 20, 700);
-        int xLabel = 20;
-        int xQty = 200; // position pour quantité alignée à droite
-        int y = 100;
-
-        // Style de la police
-        gc.setFont(Font.font("Arial", FontWeight.BOLD, 16));
-        gc.setFill(Color.WHITE);
-        gc.fillText("Stockage :", xLabel, y);
-        y += 30;
-
-        // Style pour les lignes de ressources
-        gc.setFont(Font.font("Arial", FontWeight.NORMAL, 14));
-
-        for (Map.Entry<Ressource, Integer> entry : state.ship.getInventory().entrySet()) {
-            Ressource res = entry.getKey();
-            int qty = entry.getValue();
-
-            // Mesurer la largeur du texte quantité
-            Text text = new Text(String.valueOf(qty));
-            text.setFont(Font.font("Verdana", FontWeight.BOLD, 14));
-            double qtyWidth = text.getLayoutBounds().getWidth();
-
-            // Puis affichage avec alignement
-            gc.fillText(res.getName(), xLabel, y);
-            gc.fillText(String.valueOf(qty), xQty - qtyWidth, y);
-
-            y += 30;
-        }
-
-
-        if (!message.isEmpty()) {
-            if (System.currentTimeMillis() - messageStartTime < MESSAGE_DURATION) {
-                gc.fillText(message, 20, 500);
-            } else {
-                message = "";
-            }
-        }
-
-        if (mining) {
-            double barX = 20;
-            double barY = 650;
-            double barWidth = 300;
-            double barHeight = 20;
-
-            gc.setFill(Color.DARKGRAY);
-            gc.fillRect(barX, barY, barWidth, barHeight);
-
-            gc.setFill(Color.LIMEGREEN);
-            gc.fillRect(barX, barY, barWidth * miningProgress, barHeight);
-
-            gc.setStroke(Color.BLACK);
-            gc.strokeRect(barX, barY, barWidth, barHeight);
-
-            gc.setFill(Color.WHITE);
-            gc.setFont(new Font("Arial", 16));
-            gc.fillText("Minage en cours... " + (int) (miningProgress * 100) + "%", barX, barY - 10);
-        }
+        hud.render(gc); // render HUD \\
         Wall.displayWall(gc);
-
         ZoneView.render(gc, player); // Rendu visuel des zones interactives \\
-
         gc.restore();
     }
-
 
     private void goToMainMenu() {
         MainMenuScene menu = new MainMenuScene(primaryStage);
@@ -578,3 +517,4 @@ public class GameScene {
     //endregion
 
 }
+
