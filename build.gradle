@@ -19,10 +19,7 @@ dependencies {
     implementation "org.openjfx:javafx-base:21:${platform}"
     implementation "org.openjfx:javafx-media:21:${platform}"
 
-    // API + engine pour compilation + exécution
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'
-
-    // s'assurer que la plateforme JUnit peut démarrer au runtime
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.0'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.0'
 }
@@ -31,11 +28,12 @@ sourceSets {
     main {
         java {
             srcDirs = ['SpaceMining/src']
+            exclude '**/*Test.java'
         }
     }
     test {
         java {
-            srcDirs = ['SpaceMining/test']
+            srcDirs = ['SpaceMining/test', 'SpaceMining/src/game', 'SpaceMining/src/world/planet']
         }
     }
 }
